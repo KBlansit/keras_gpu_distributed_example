@@ -205,7 +205,7 @@ test_parallel_steps = calculate_train_and_valid_steps(
 )
 
 # decorate function, and then return model
-model_func = load_model_with_scope(model_func)
+model_func = load_model_with_scope(cnn_model)
 model_func = load_model_with_weights(PREV_MODEL_PATH)(model_func)
 model = model_func()
 
