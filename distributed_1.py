@@ -144,8 +144,8 @@ train_buffer_size = x_train.shape[0]
 test_buffer_size = x_test.shape[0]
 
 # make datasets
-train_dataset = make_datasets(x_train, y_train, train_buffer_size)
-test_dataset = make_datasets(x_test, y_test, test_buffer_size)
+train_dataset = make_datasets(x_train, y_train)
+test_dataset = make_datasets(x_test, y_test)
 
 # calculate number of steps
 train_parallel_steps = calculate_train_and_valid_steps(
