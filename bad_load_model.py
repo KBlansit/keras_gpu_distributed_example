@@ -221,6 +221,8 @@ with tf.device('/cpu:0'):
     prev_weights = prev_model.get_weights()
 
 
+# make a learning strategy and open scope for
+# compiling model
 strategy = tf.distribute.MirroredStrategy()
 print("Number of devices: {}.".format(strategy.num_replicas_in_sync))
 with strategy.scope():
