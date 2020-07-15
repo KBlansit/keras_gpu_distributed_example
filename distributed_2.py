@@ -30,52 +30,9 @@ USE_MULTI_GPU = True
 IMG_ROWS, IMG_COLS = 28, 28
 IMG_SHAPE = (IMG_ROWS, IMG_COLS, 1)
 
+PREV_MODEL_PATH = "trained_model.hd"
 
 # functions
-def load_model_with_scope(model_func):
-    def wrapper(*args, **kwargs):
-        # determine if we use multiple GPUs
-        if PC == "AiDA-1" and USE_MULTI_GPU:
-            # print infromation
-            print("Using multi GPU settings on: {}.".format(PC))
-
-            # create a MirroredStrategy and open scope
-            strategy = tf.distribute.MirroredStrategy()
-            with strategy.scope():
-                # Everything that creates variables should be under the strategy scope
-                # In general this is only model construction & `compile()`
-                model = model_func(*args, **kwargs)
-
-                print("Number of devices: {}.".format(strategy.num_replicas_in_sync))
-        # not using multiple GPUs
-        else:
-            model = model_func()
-        return model
-    return wrapper
-
-def load_model_with_weights(prev_model_path):
-    def wrap(model_func):
-        def wrapper(*args, **kwargs):
-            # load model
-            prev_model = load_model(prev_model_path)
-            prev_weights = prev_model.get_weights()
-
-            # clean up so we don't overallocate space
-            del prev_model
-            K.clear_session()
-
-            # load model and set weights
-            model = model_func(*args, **kwargs)
-            model.set_weights(prev_weights)
-
-            # message
-            print("Set model weights")
-
-            # return
-            return model
-        return wrapper
-    return wrap
-
 def load_minst_data():
     """ loads mnist data
     :returns:
@@ -139,6 +96,52 @@ def calculate_train_and_valid_steps(buffer_size, batch_size):
 
     return num_of_steps
 
+def load_model_with_scope(model_func):
+    def wrapper(*args, **kwargs):
+        # determine if we use multiple GPUs
+        if PC == "AiDA-1" and USE_MULTI_GPU:
+            # print infromation
+            print("\n\nUsing multi GPU settings on: {}.\n\n".format(PC))
+
+            # create a MirroredStrategy and open scope
+            strategy = tf.distribute.MirroredStrategy()
+            with strategy.scope():
+                # Everything that creates variables should be under the strategy scope
+                # In general this is only model construction & `compile()`
+                model = model_func(*args, **kwargs)
+
+                print("Number of devices: {}.".format(strategy.num_replicas_in_sync))
+        # not using multiple GPUs
+        else:
+            print("\n\nUsing single GPU settings on: {}.\n\n".format(PC))
+
+            model = model_func(*args, **kwargs)
+        return model
+    return wrapper
+
+def load_model_with_weights(prev_model_path):
+    def wrap(model_func):
+        def wrapper(*args, **kwargs):
+            with tf.device('/cpu:0'):
+                # load model
+                prev_model = load_model(prev_model_path)
+                prev_weights = prev_model.get_weights()
+
+                # clean up so we don't overallocate space
+                del prev_model
+
+            # load model and set weights
+            model = model_func(*args, **kwargs)
+            model.set_weights(prev_weights)
+
+            # message
+            print("Set model weights")
+
+            # return
+            return model
+        return wrapper
+    return wrap
+
 def cnn_model():
     """ loads a simple cnn model
     :returns:
@@ -188,8 +191,8 @@ train_buffer_size = x_train.shape[0]
 test_buffer_size = x_test.shape[0]
 
 # make datasets
-train_dataset = make_datasets(x_train, y_train, train_buffer_size)
-test_dataset = make_datasets(x_test, y_test, test_buffer_size)
+train_dataset = make_datasets(x_train, y_train)
+test_dataset = make_datasets(x_test, y_test)
 
 # calculate number of steps
 train_parallel_steps = calculate_train_and_valid_steps(
@@ -201,24 +204,12 @@ test_parallel_steps = calculate_train_and_valid_steps(
         BATCH_SIZE,
 )
 
-model_func = cnn_model
-model_func = load_model_with_scope(cnn_model)
+# decorate function, and then return model
+model_func = load_model_with_scope(model_func)
+model_func = load_model_with_weights(PREV_MODEL_PATH)(model_func)
 model = model_func()
-
-# fit model
-model.fit(
-    train_dataset,
-    steps_per_epoch=train_parallel_steps,
-    epochs=EPOCHS,
-    validation_data=test_dataset,
-    validation_steps=test_parallel_steps,
-)
 
 # get score and print
 score = model.evaluate(test_dataset, steps=test_parallel_steps)
 print('Test loss:', score[0])
 print('Test accuracy:', score[1])
-
-
-# save model
-model.save("trained_model.hd")
