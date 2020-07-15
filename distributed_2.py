@@ -32,6 +32,50 @@ IMG_SHAPE = (IMG_ROWS, IMG_COLS, 1)
 
 
 # functions
+def load_model_with_scope(model_func):
+    def wrapper(*args, **kwargs):
+        # determine if we use multiple GPUs
+        if PC == "AiDA-1" and USE_MULTI_GPU:
+            # print infromation
+            print("Using multi GPU settings on: {}.".format(PC))
+
+            # create a MirroredStrategy and open scope
+            strategy = tf.distribute.MirroredStrategy()
+            with strategy.scope():
+                # Everything that creates variables should be under the strategy scope
+                # In general this is only model construction & `compile()`
+                model = model_func(*args, **kwargs)
+
+                print("Number of devices: {}.".format(strategy.num_replicas_in_sync))
+        # not using multiple GPUs
+        else:
+            model = model_func()
+        return model
+    return wrapper
+
+def load_model_with_weights(prev_model_path):
+    def wrap(model_func):
+        def wrapper(*args, **kwargs):
+            # load model
+            prev_model = load_model(prev_model_path)
+            prev_weights = prev_model.get_weights()
+
+            # clean up so we don't overallocate space
+            del prev_model
+            K.clear_session()
+
+            # load model and set weights
+            model = model_func(*args, **kwargs)
+            model.set_weights(prev_weights)
+
+            # message
+            print("Set model weights")
+
+            # return
+            return model
+        return wrapper
+    return wrap
+
 def load_minst_data():
     """ loads mnist data
     :returns:
@@ -157,17 +201,9 @@ test_parallel_steps = calculate_train_and_valid_steps(
         BATCH_SIZE,
 )
 
-
-# if we're on the correct VM and are using multi GPUs, load scope
-if PC == "AiDA-1" and USE_MULTI_GPU:
-    # make a learning strategy and open scope for compilling model
-    strategy = tf.distribute.MirroredStrategy()
-    print("Number of devices: {}.".format(strategy.num_replicas_in_sync))
-    with strategy.scope():
-        model = cnn_model()
-else:
-    model = cnn_model()
-
+model_func = cnn_model
+model_func = load_model_with_scope(cnn_model)
+model = model_func()
 
 # fit model
 model.fit(
