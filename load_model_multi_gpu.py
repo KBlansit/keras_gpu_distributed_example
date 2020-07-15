@@ -122,6 +122,7 @@ def load_model_with_scope(model_func):
 def load_model_with_weights(prev_model_path):
     def wrap(model_func):
         def wrapper(*args, **kwargs):
+            # load model with cpu
             with tf.device('/cpu:0'):
                 # load model
                 prev_model = load_model(prev_model_path)

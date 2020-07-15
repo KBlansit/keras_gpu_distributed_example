@@ -205,10 +205,29 @@ test_parallel_steps = calculate_train_and_valid_steps(
 )
 
 
+# WILL NOT WORK
 # make a learning strategy and open scope for compilling model
 strategy = tf.distribute.MirroredStrategy()
 print("Number of devices: {}.".format(strategy.num_replicas_in_sync))
 with strategy.scope():
-    load_model(PREV_MODEL_PATH)
+    model = load_model(PREV_MODEL_PATH)
 
-    
+
+# WILL WORK
+# load model with cpu
+with tf.device('/cpu:0'):
+    # load model
+    prev_model = load_model(PREV_MODEL_PATH)
+    prev_weights = prev_model.get_weights()
+
+
+strategy = tf.distribute.MirroredStrategy()
+print("Number of devices: {}.".format(strategy.num_replicas_in_sync))
+with strategy.scope():
+    model = cnn_model()
+model.set_weights(prev_weights)
+
+# get score and print
+score = model.evaluate(test_dataset, steps=test_parallel_steps)
+print('Test loss:', score[0])
+print('Test accuracy:', score[1])
